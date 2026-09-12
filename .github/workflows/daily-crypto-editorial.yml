@@ -80,5 +80,6 @@ jobs:
             echo "No new local files to commit."
           else
             git commit -m "chore(editorial): sync published articles and covers [skip ci]"
-            git push https://x-access-token:${GH_PAT}@github.com/tindokingo-coder/cryptocardhq.git HEAD:main
+            git pull --rebase https://x-access-token:${GH_PAT}@github.com/tindokingo-coder/cryptocardhq.git main || true
+          git push https://x-access-token:${GH_PAT}@github.com/tindokingo-coder/cryptocardhq.git HEAD:main
           fi
