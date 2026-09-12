@@ -1,0 +1,84 @@
+name: Autonomous Crypto Editorial Dispatcher
+
+on:
+  schedule:
+    # 6 Peak Global & US Market Drops Daily (Unlimited Free Minutes on Public Runner)
+    - cron: '0 0 * * *'    # Drop 1: 00:00 UTC (Midnight UTC / Asian Market Open)
+    - cron: '0 4 * * *'    # Drop 2: 04:00 UTC (Tokyo & Hong Kong Midday Session)
+    - cron: '0 8 * * *'    # Drop 3: 08:00 UTC (European London Morning Open)
+    - cron: '30 13 * * *'  # Drop 4: 13:30 UTC (09:30 AM EDT Wall Street Open & ETF Bell)
+    - cron: '0 17 * * *'   # Drop 5: 17:00 UTC (01:00 PM EDT US Midday Liquidity)
+    - cron: '0 21 * * *'   # Drop 6: 21:00 UTC (05:00 PM EDT US Market Close & Settlement)
+  workflow_dispatch:
+    inputs:
+      article_count:
+        description: 'Number of articles to generate and publish (1 to 6)'
+        required: true
+        default: '1'
+        type: choice
+        options:
+          - '1'
+          - '2'
+          - '3'
+          - '4'
+          - '5'
+          - '6'
+      desks:
+        description: 'Desks to run (all, or comma-separated: reporter,bitcoin,war,memecoin,xrp_eth,cards)'
+        required: true
+        default: 'all'
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  dispatch-editorial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout Private CryptoCardHQ Repository
+        uses: actions/checkout@v4
+        with:
+          repository: 'tindokingo-coder/cryptocardhq'
+          token: ${{ secrets.GH_PAT }}
+          ref: 'main'
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install google-genai pillow python-dotenv requests
+
+      - name: Run Autonomous Multi-Agent Newsroom Pipeline
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          PUBLISH_API_KEY: ${{ secrets.PUBLISH_API_KEY }}
+          PUBLISH_API_URL: ${{ secrets.PUBLISH_API_URL }}
+          ARTICLE_COUNT: ${{ github.event.inputs.article_count || 1 }}
+          DESKS: ${{ github.event.inputs.desks || 'all' }}
+        run: |
+          python scripts/editorial/gemini_newsroom.py --count "${ARTICLE_COUNT}" --desks "${DESKS}"
+
+      - name: Commit and Push Updated Content Back to Private Repo
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          git config user.name "CryptoCardHQ Newsroom Bot"
+          git config user.email "bot@cryptocardhq.com"
+          git add content/cms.json client/public/news/covers/
+          if git diff --staged --quiet; then
+            echo "No new local files to commit."
+          else
+            git commit -m "chore(editorial): sync published articles and covers [skip ci]"
+            git push https://x-access-token:${GH_PAT}@github.com/tindokingo-coder/cryptocardhq.git HEAD:main
+          fi
